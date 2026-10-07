@@ -108,6 +108,17 @@ input:focus-visible, button:focus-visible { outline: 3px solid var(--magenta); o
 .comp.tail { border-left-color: var(--bad); }
 .comp.tail .v { color: var(--bad); }
 .comp.cross { border-left-color: var(--sky); }
+.verdict { display: flex; align-items: center; gap: 10px; border-radius: 4px; padding: 10px 14px; font-weight: 600; border: 1.5px solid var(--good); color: var(--good); background: color-mix(in srgb, var(--good) 10%, transparent); }
+.verdict.over { border-color: var(--bad); color: var(--bad); background: color-mix(in srgb, var(--bad) 10%, transparent); }
+.verdict .pill { font-family: var(--f-display); text-transform: uppercase; letter-spacing: .08em; font-size: .85rem; padding: 2px 8px; border-radius: 3px; background: currentColor; }
+.verdict .pill span { color: var(--sheet); }
+.verdict .why { font-weight: 500; font-size: .9rem; }
+.comp.over { border-left-color: var(--bad); }
+.comp.over .v { color: var(--bad); }
+td .over { color: var(--bad); font-weight: 700; }
+td .ok { color: var(--good); }
+.limits { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; max-width: 22rem; }
+.limits .unit { font-size: .78rem; color: var(--muted); }
 .formula { font-family: var(--f-data); font-size: .78rem; color: var(--muted); background: var(--paper); border-radius: 4px; padding: 8px 10px; overflow-x: auto; white-space: nowrap; }
 .tablewrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
@@ -171,10 +182,19 @@ td .t { color: var(--bad); }
           <div><input id="wgst" type="number" min="0" max="250" step="1" placeholder="—" aria-label="Gust in knots (optional)"><div class="unit">Gust kt (optional)</div></div>
         </div>
       </div>
+
+      <div>
+        <span class="label">Limits, including gust</span>
+        <div class="limits">
+          <div><input id="limXw" type="number" min="0" max="99" step="1" value="40" aria-label="Maximum crosswind in knots"><div class="unit">Max crosswind kt</div></div>
+          <div><input id="limTw" type="number" min="0" max="99" step="1" value="10" aria-label="Maximum tailwind in knots"><div class="unit">Max tailwind kt</div></div>
+        </div>
+      </div>
     </section>
 
     <section class="panel out" aria-label="Results">
       <div class="instrument" id="instrument"></div>
+      <div id="verdict" class="verdict" hidden><span class="pill"><span id="verdictPill"></span></span><span class="why" id="verdictWhy"></span></div>
       <div class="comps">
         <div id="cHT" class="comp head"><div class="k" id="htLabel">Headwind</div><div class="v" id="htVal">—</div><div class="d" id="htGust">&nbsp;</div></div>
         <div class="comp cross"><div class="k">Crosswind</div><div class="v" id="xwVal">—</div><div class="d" id="xwGust">&nbsp;</div></div>
@@ -184,7 +204,7 @@ td .t { color: var(--bad); }
         <span class="label" id="allLabel">All runways</span>
         <div class="tablewrap">
           <table>
-            <thead><tr><th>Rwy</th><th>Hdg</th><th>Head / Tail</th><th>Cross</th></tr></thead>
+            <thead><tr><th>Rwy</th><th>Hdg</th><th>Head / Tail</th><th>Cross</th><th>Limits</th></tr></thead>
             <tbody id="allRows"></tbody>
           </table>
         </div>
@@ -289,6 +309,21 @@ function setRef(ref) {
 
 function compText(v) { return Math.round(Math.abs(v)); }
 
+function limits() {
+  const xw = parseFloat($("limXw").value), tw = parseFloat($("limTw").value);
+  return { xw: Number.isFinite(xw) ? xw : 40, tw: Number.isFinite(tw) ? tw : 10 };
+}
+
+// Worst-case components using the gust when it is higher than the steady wind.
+// Returns rounded knots, the same numbers the pilot sees, and which limits they break.
+function check(windDir, speed, gust, hdg, lim) {
+  const peak = Number.isFinite(gust) && gust > speed ? gust : speed;
+  const c = components(windDir, peak, hdg);
+  const xw = Math.round(Math.abs(c.cross));
+  const tw = c.head < 0 ? Math.round(-c.head) : 0;
+  return { xw, tw, xwOver: xw > lim.xw, twOver: tw > lim.tw, gusted: peak > speed };
+}
+
 function render() {
   const a = state.iata ? AIRPORTS[state.iata] : null;
   const r = a && state.rwy != null ? a[5][state.rwy] : null;
@@ -296,6 +331,9 @@ function render() {
   const wgst = parseFloat($("wgst").value);
   const okWind = Number.isFinite(wdir) && Number.isFinite(wspd) && wdir >= 0 && wdir <= 360 && wspd >= 0;
 
+  $("verdict").hidden = true;
+  $("cHT").classList.remove("over");
+  document.querySelector(".comp.cross").classList.remove("over");
   if (!r) {
     ["hdgMag", "hdgTrue", "rwyLen", "htVal", "xwVal"].forEach(id => $(id).textContent = "—");
     $("hdgNote").textContent = ""; $("formula").textContent = ""; $("allRows").innerHTML = "";
@@ -359,6 +397,20 @@ function render() {
   const ang = ((wdir - hdg + 540) % 360) - 180;
   $("formula").textContent = `Angle = ${fmt3(wdir)}° − ${hdg.toFixed(1)}° (${refName}) = ${ang.toFixed(1)}° · head = ${wspd}·cos(${ang.toFixed(1)}°) = ${c.head.toFixed(1)} · cross = ${wspd}·sin(${ang.toFixed(1)}°) = ${c.cross.toFixed(1)}`;
 
+  const lim = limits();
+  const chk = check(wdir, wspd, wgst, hdg, lim);
+  const reasons = [];
+  if (chk.xwOver) reasons.push(`Crosswind ${chk.xw} kt${chk.gusted ? " incl. gust" : ""} is over the ${lim.xw} kt limit`);
+  if (chk.twOver) reasons.push(`Tailwind ${chk.tw} kt${chk.gusted ? " incl. gust" : ""} is over the ${lim.tw} kt limit`);
+  const over = reasons.length > 0;
+  $("verdict").hidden = false;
+  $("verdict").className = "verdict" + (over ? " over" : "");
+  $("verdictPill").textContent = over ? "Over limits" : "Within limits";
+  $("verdictWhy").textContent = over ? reasons.join(". ") + "."
+    : `Crosswind ${chk.xw} kt of ${lim.xw} · tailwind ${chk.tw} kt of ${lim.tw}${chk.gusted ? " (incl. gust)" : ""}`;
+  document.querySelector(".comp.cross").classList.toggle("over", chk.xwOver);
+  $("cHT").classList.toggle("over", chk.twOver);
+
   // all runways table
   $("allLabel").textContent = `All runways at ${state.iata}, wind ${fmt3(wdir)}/${Math.round(wspd)}`;
   const rows = a[5].map((rr, i) => {
@@ -372,7 +424,7 @@ function render() {
     const tr = document.createElement("tr");
     if (i === state.rwy) tr.className = "sel";
     if (!cc) {
-      tr.innerHTML = `<td></td><td>—</td><td colspan="2" style="text-align:right">No heading in database</td>`;
+      tr.innerHTML = `<td></td><td>—</td><td colspan="3" style="text-align:right">No heading in database</td>`;
       tr.firstChild.textContent = rr[0];
       tr.addEventListener("click", () => selectRunway(i));
       tb.appendChild(tr);
@@ -380,7 +432,9 @@ function render() {
     }
     const ht = Math.round(cc.head) < 0 ? `<span class="t">${compText(cc.head)} T</span>` : `${compText(cc.head)} H`;
     const xs = Math.round(Math.abs(cc.cross)) === 0 ? "0" : `${compText(cc.cross)} ${cc.cross > 0 ? "R" : "L"}`;
-    tr.innerHTML = `<td></td><td>${fmt3(state.ref === "mag" ? hh.mag : hh.tru)}°${hh.manual ? "*" : ""}</td><td>${ht}</td><td>${xs}</td>`;
+    const rc = check(wdir, wspd, wgst, state.ref === "mag" ? hh.mag : hh.tru, lim);
+    const lm = rc.xwOver || rc.twOver ? `<span class="over">${[rc.xwOver && "XW", rc.twOver && "TW"].filter(Boolean).join(" ")}</span>` : `<span class="ok">OK</span>`;
+    tr.innerHTML = `<td></td><td>${fmt3(state.ref === "mag" ? hh.mag : hh.tru)}°${hh.manual ? "*" : ""}</td><td>${ht}</td><td>${xs}</td><td>${lm}</td>`;
     tr.firstChild.textContent = rr[0];
     tr.addEventListener("click", () => selectRunway(i));
     tb.appendChild(tr);
@@ -438,6 +492,11 @@ $("iata").addEventListener("input", e => {
   else { $("apt").className = "apt"; $("apt").textContent = "Type a 3-letter IATA code, e.g. LAX, ARN, LHR."; $("signs").innerHTML = ""; state.iata = null; render(); }
 });
 for (const id of ["wdir", "wspd", "wgst"]) $(id).addEventListener("input", () => { $("exTag").hidden = true; render(); });
+for (const id of ["limXw", "limTw"]) {
+  const saved = load("rwc-" + id);
+  if (saved !== null && saved !== "") $(id).value = saved;
+  $(id).addEventListener("input", e => { store("rwc-" + id, e.target.value); render(); });
+}
 $("refMag").addEventListener("click", () => setRef("mag"));
 $("hdgManual").addEventListener("input", e => {
   if (!state.iata || state.rwy == null) return;

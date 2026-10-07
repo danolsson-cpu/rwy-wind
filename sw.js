@@ -1,6 +1,6 @@
 // Saves the app on the phone the first time it opens, so it works without internet afterwards.
 // Change VERSION whenever you upload a new index.html so phones pick up the update.
-const VERSION = "rwy-wind-v2";
+const VERSION = "rwy-wind-v3";
 const FILES = ["./", "index.html", "manifest.webmanifest", "icon-180.png", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", e => {
