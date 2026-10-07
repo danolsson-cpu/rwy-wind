@@ -218,6 +218,7 @@ td .t { color: var(--bad); }
     Headings are taken as published in the database, even where they differ from the runway number. Where the database has no heading, the app asks you to enter it from your chart.
     For training and planning only. Always use official charts, ATIS and tower winds for flight.
   </p>
+  <p class="foot">Version 5 · 7 Oct 2026</p>
 </div>
 
 <script>
@@ -523,7 +524,12 @@ if ($("iata").value.toUpperCase() === "LAX" && !load("rwc-rwy-LAX")) {
 </script>
 
 <script>
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(r => r.update()).catch(() => {});
+  // When a new version takes over, reload once so it shows immediately.
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (!reloaded) { reloaded = true; location.reload(); } });
+}
 </script>
 </body>
 </html>

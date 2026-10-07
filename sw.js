@@ -1,10 +1,11 @@
-// Saves the app on the phone the first time it opens, so it works without internet afterwards.
-// Change VERSION whenever you upload a new index.html so phones pick up the update.
-const VERSION = "rwy-wind-v4";
+// Keeps a copy of the app on the phone so it works without internet.
+// Online: always loads the newest page from the web and refreshes the saved copy.
+// Offline: uses the saved copy.
+const VERSION = "rwy-wind-v5";
 const FILES = ["./", "index.html", "manifest.webmanifest", "icon-180.png", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES.map(f => new Request(f, { cache: "reload" })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", e => {
@@ -13,14 +14,21 @@ self.addEventListener("activate", e => {
     .then(() => self.clients.claim()));
 });
 
-// Serve from the phone first; fetch from the internet only for things not saved yet (e.g. fonts) and save them too.
+function save(req, res) {
+  if (res.ok || res.type === "opaque") { const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); }
+  return res;
+}
+
 self.addEventListener("fetch", e => {
-  if (e.request.method !== "GET") return;
-  e.respondWith(caches.match(e.request, { ignoreSearch: true }).then(hit => hit || fetch(e.request).then(res => {
-    if (res.ok || res.type === "opaque") {
-      const copy = res.clone();
-      caches.open(VERSION).then(c => c.put(e.request, copy));
-    }
-    return res;
-  }).catch(() => caches.match("index.html"))));
+  const req = e.request;
+  if (req.method !== "GET") return;
+  const sameSite = new URL(req.url).origin === self.location.origin;
+  if (sameSite) {
+    // Network first, so updates show up straight away; saved copy when offline.
+    e.respondWith(fetch(req, { cache: "no-cache" }).then(res => save(req, res))
+      .catch(() => caches.match(req, { ignoreSearch: true }).then(hit => hit || caches.match("index.html"))));
+  } else {
+    // Fonts: saved copy first, they never change.
+    e.respondWith(caches.match(req).then(hit => hit || fetch(req).then(res => save(req, res))));
+  }
 });
