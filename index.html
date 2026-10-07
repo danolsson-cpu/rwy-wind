@@ -53,6 +53,7 @@ html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { background: var(--paper); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.45; padding: 0 16px; }
 .wrap { max-width: 1040px; margin: 0 auto; padding-block: 28px 48px; display: grid; gap: 20px; }
 header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 20px; border-bottom: 2px solid var(--ink); padding-bottom: 10px; }
@@ -175,10 +176,10 @@ td .t { color: var(--bad); }
       </div>
 
       <div>
-        <span class="label">Wind <span id="exTag" class="example">Example</span></span>
+        <span class="label">Wind</span>
         <div class="wind">
-          <div><input id="wdir" type="number" min="0" max="360" step="1" value="280" aria-label="Wind direction in degrees"><div class="unit">Direction °</div></div>
-          <div><input id="wspd" type="number" min="0" max="200" step="1" value="15" aria-label="Wind speed in knots"><div class="unit">Speed kt</div></div>
+          <div><input id="wdir" type="number" min="0" max="360" step="1" placeholder="—" aria-label="Wind direction in degrees"><div class="unit">Direction °</div></div>
+          <div><input id="wspd" type="number" min="0" max="200" step="1" placeholder="—" aria-label="Wind speed in knots"><div class="unit">Speed kt</div></div>
           <div><input id="wgst" type="number" min="0" max="250" step="1" placeholder="—" aria-label="Gust in knots (optional)"><div class="unit">Gust kt (optional)</div></div>
         </div>
       </div>
@@ -491,7 +492,7 @@ $("iata").addEventListener("input", e => {
   else if (v.trim().length >= 3) setAirport(v);
   else { $("apt").className = "apt"; $("apt").textContent = "Type a 3-letter IATA code, e.g. LAX, ARN, LHR."; $("signs").innerHTML = ""; state.iata = null; render(); }
 });
-for (const id of ["wdir", "wspd", "wgst"]) $(id).addEventListener("input", () => { $("exTag").hidden = true; render(); });
+for (const id of ["wdir", "wspd", "wgst"]) $(id).addEventListener("input", () => { render(); });
 for (const id of ["limXw", "limTw"]) {
   const saved = load("rwc-" + id);
   if (saved !== null && saved !== "") $(id).value = saved;
@@ -509,7 +510,7 @@ $("hdgManual").addEventListener("input", e => {
 });
 $("refTrue").addEventListener("click", () => setRef("true"));
 
-// Start: LAX 24R with an example wind of 280° at 15 kt
+// Start: LAX 24R (or the last airport used), wind boxes empty
 const savedRef = load("rwc-ref");
 if (savedRef === "true") { state.ref = "true"; $("refMag").setAttribute("aria-pressed", "false"); $("refTrue").setAttribute("aria-pressed", "true"); }
 const savedApt = load("rwc-apt");
