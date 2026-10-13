@@ -1,7 +1,7 @@
 // Keeps a copy of the app on the phone so it opens without internet.
 // App files: newest from the web when online, saved copy when offline.
 // Weather data is never cached here; the app keeps its own last copy.
-const VERSION = "weather-v2";
+const VERSION = "weather-v3";
 const FILES = ["./", "index.html", "style.css", "app.js", "manifest.webmanifest", "icon-180.png", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", e => {
