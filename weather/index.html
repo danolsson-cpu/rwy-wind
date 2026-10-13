@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Weather">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#2f7fd8">
+<meta name="description" content="Weather, wind, severe weather alerts, air quality, pollen and nearest wildfire.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Weather</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-sky="clear-day">
+<div class="sky" aria-hidden="true"><div class="sky-glow"></div><div class="sky-stars"></div></div>
+
+<!-- Compact title that slides in once the big header scrolls away -->
+<div class="mini" id="mini" aria-hidden="true">
+  <span id="mini-name">—</span><span class="mini-sep">|</span><span id="mini-line">—</span>
+</div>
+
+<!-- Shown while previewing a searched place (like Weather's Cancel / Add) -->
+<div class="previewbar" id="previewbar" hidden>
+  <button class="glass-btn text" id="pv-cancel" type="button">Cancel</button>
+  <button class="glass-btn text strong" id="pv-add" type="button">Add</button>
+</div>
+
+<main class="app" id="app">
+  <section class="hero" id="hero">
+    <div class="hero-sub" id="h-sub"></div>
+    <h1 class="hero-name" id="h-name">Weather</h1>
+    <div class="hero-temp" id="h-temp">&nbsp;</div>
+    <div class="hero-cond" id="h-cond">&nbsp;</div>
+    <div class="hero-hl" id="h-hl">&nbsp;</div>
+  </section>
+
+  <div class="empty" id="empty" hidden>
+    <p>Allow location access or search for a city to see the weather.</p>
+    <div class="empty-actions">
+      <button class="glass-btn text" id="empty-locate" type="button">Use My Location</button>
+      <button class="glass-btn text strong" id="empty-search" type="button">Search</button>
+    </div>
+  </div>
+
+  <div class="cards" id="cards">
+    <div id="c-alerts"></div>
+    <div id="c-hourly"></div>
+    <div id="c-daily"></div>
+    <div id="c-aqi"></div>
+    <div id="c-pollen"></div>
+    <div id="c-wind"></div>
+    <div class="grid">
+      <div id="c-fire"></div>
+      <div id="c-uv"></div>
+      <div id="c-feels"></div>
+      <div id="c-humid"></div>
+      <div id="c-vis"></div>
+      <div id="c-press"></div>
+      <div id="c-sun"></div>
+      <div id="c-precip"></div>
+    </div>
+    <footer class="sources" id="sources"></footer>
+  </div>
+</main>
+
+<!-- Floating Liquid Glass toolbar -->
+<nav class="dock" aria-label="Toolbar">
+  <button class="glass-btn round" id="btn-locate" type="button" aria-label="My Location"></button>
+  <button class="glass-btn search" id="btn-search" type="button"><span class="search-ico"></span><span>Search for a city or ZIP</span></button>
+  <button class="glass-btn round" id="btn-list" type="button" aria-label="Saved locations"></button>
+</nav>
+
+<div class="sheet-root" id="sheet-root"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
