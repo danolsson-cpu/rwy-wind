@@ -192,6 +192,11 @@ function bearing(a, b) {
 }
 
 const T = v => (v == null || isNaN(v)) ? "--" : Math.round(v) + "°";
+const fToC = f => (f - 32) * 5 / 9, cToF = c => c * 9 / 5 + 32;
+// The same temperature in the other unit (°C when showing °F, °F when showing °C), with its unit spelled out.
+const altT = (v, imp) => (v == null || isNaN(v)) ? "" : Math.round(imp ? fToC(v) : cToF(v)) + (imp ? "°C" : "°F");
+// Main temperature with the other unit stacked underneath, smaller and dimmer.
+const TT = (v, imp) => `<span class="tt"><span>${T(v)}</span><span class="alt">${altT(v, imp)}</span></span>`;
 const num = (v, d = 0) => (v == null || isNaN(v)) ? "--" : Number(v).toLocaleString("en-US", { maximumFractionDigits: d, minimumFractionDigits: d });
 // Open-Meteo returns local wall-clock times like "2026-10-13T06:58" for the place's time zone.
 function clock(s, short) {
@@ -283,7 +288,6 @@ const G = {
   drop: "M12 3s6 7 6 11a6 6 0 0 1-12 0c0-4 6-11 6-11z",
   eye: "M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 9.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z",
   gauge: "M3.5 17a9 9 0 1 1 17 0M12 13l4.5-4.5",
-  sunrise: "M3 19h18M6 19a6 6 0 0 1 12 0M12 3v6M9 6l3-3 3 3",
   umbrella: "M3 12a9 9 0 0 1 18 0zM12 12v7a2 2 0 0 1-4 0",
   clock: "M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM12 7v5l3 2",
   calendar: "M4 6h16v14H4zM4 10h16M8 3v5M16 3v5",
@@ -335,10 +339,16 @@ function renderForecast(f, place) {
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.content = SKY_COLORS[sky][0];
 
-  $("#h-temp").textContent = T(c.temperature_2m);
+  const ht = $("#h-temp");
+  ht.textContent = T(c.temperature_2m);
+  ht.classList.toggle("long", ht.textContent.length > 3);
+  $("#h-alt").textContent = altT(c.temperature_2m, imp);
   $("#h-cond").textContent = condName(c.weather_code, c.is_day);
   $("#h-hl").textContent = `H:${T(d.temperature_2m_max[0])}  L:${T(d.temperature_2m_min[0])}`;
-  $("#mini-line").textContent = `${T(c.temperature_2m)} ${condName(c.weather_code, c.is_day)}`;
+  $("#h-hl-alt").textContent = `H:${altT(d.temperature_2m_max[0], imp)}  L:${altT(d.temperature_2m_min[0], imp)}`;
+  $("#mini-line").innerHTML = `${T(c.temperature_2m)}<span class="alt">${altT(c.temperature_2m, imp)}</span> ${esc(condName(c.weather_code, c.is_day))}`;
+  renderSunWidget(d.sunrise[0], d.sunset[0]);
+  state.temp = c.temperature_2m; state.imperial = imp;
 
   // Hourly: next 24 hours with sunrise/sunset slotted in.
   const nowKey = c.time.slice(0, 13) + ":00";
@@ -359,7 +369,7 @@ function renderForecast(f, place) {
     const p = h.precipitation_probability ? h.precipitation_probability[it.i] : null;
     return `<div class="hour"><div class="t">${n === 0 ? "Now" : clock(it.t, true)}</div>
       <div class="ico">${icon(h.weather_code[it.i], h.is_day[it.i])}${p >= 20 ? `<div class="p">${Math.round(p / 10) * 10}%</div>` : ""}</div>
-      <div class="v">${n === 0 ? T(c.temperature_2m) : T(h.temperature_2m[it.i])}</div></div>`;
+      <div class="v">${TT(n === 0 ? c.temperature_2m : h.temperature_2m[it.i], imp)}</div></div>`;
   }).join("");
   card("c-hourly", { body: `<div class="card-text">${esc(hourlySummary(f))}</div><hr class="rule"><div class="hourly">${hours}</div>` });
 
@@ -371,9 +381,9 @@ function renderForecast(f, place) {
     const now = i === 0 ? `<i class="now" style="left:${Math.min(100, Math.max(0, (c.temperature_2m - lo) / span * 100)).toFixed(1)}%"></i>` : "";
     return `<div class="day"><span class="d">${i === 0 ? "Today" : weekday(day)}</span>
       <span class="ico">${icon(d.weather_code[i], 1)}${p >= 20 ? `<span class="p">${Math.round(p / 10) * 10}%</span>` : ""}</span>
-      <span class="lo">${T(a)}</span>
+      <span class="lo">${TT(a, imp)}</span>
       <span class="track"><i class="fill" style="left:${left.toFixed(1)}%;width:${width.toFixed(1)}%;background:linear-gradient(90deg,${tempColor(toF(a))},${tempColor(toF(b))})"></i>${now}</span>
-      <span>${T(b)}</span></div>`;
+      <span class="hi">${TT(b, imp)}</span></div>`;
   }).join("");
   card("c-daily", { title: `${d.time.length}-Day Forecast`, glyphKey: "calendar", body: rows });
 
@@ -397,11 +407,11 @@ function renderForecast(f, place) {
     <div class="card-note">${uvMax != null ? `Today's high: ${num(uvMax)}, ${uvLevel(uvMax).toLowerCase()}.` : ""}</div>` });
 
   const feel = c.apparent_temperature, diff = feel - c.temperature_2m;
-  card("c-feels", { title: "Feels Like", glyphKey: "thermo", cls: "square", body: `<div class="big">${T(feel)}</div>
+  card("c-feels", { title: "Feels Like", glyphKey: "thermo", cls: "square", body: `<div class="big">${T(feel)}</div><div class="alt-big">${altT(feel, imp)}</div>
     <div class="card-note">${Math.abs(diff) < (imp ? 3 : 2) ? "Similar to the actual temperature." : diff < 0 ? (ws > 5 ? "Wind is making it feel colder." : "Feels colder than the actual temperature.") : "Humidity is making it feel warmer."}</div>` });
 
   card("c-humid", { title: "Humidity", glyphKey: "drop", cls: "square", body: `<div class="big">${num(c.relative_humidity_2m)}%</div>
-    <div class="card-note">The dew point is ${T(c.dew_point_2m)} right now.</div>` });
+    <div class="card-note">The dew point is ${T(c.dew_point_2m)} (${altT(c.dew_point_2m, imp)}) right now.</div>` });
 
   const visUnit = (f.current_units && f.current_units.visibility) || "m";
   const visM = visUnit.startsWith("ft") ? c.visibility * 0.3048 : c.visibility;
@@ -414,17 +424,20 @@ function renderForecast(f, place) {
     ? `<div class="big">${num(hpa * 0.02953, 2)}<small>inHg</small></div><div class="card-note">${num(hpa)} hPa at sea level.</div>`
     : `<div class="big">${num(hpa)}<small>hPa</small></div><div class="card-note">At sea level.</div>` });
 
-  const nextRise = d.sunrise.find(s => s > c.time), nextSet = d.sunset.find(s => s > c.time);
-  const sunUp = c.is_day;
-  card("c-sun", { title: sunUp ? "Sunset" : "Sunrise", glyphKey: "sunrise", cls: "square", body: `<div class="big">${(sunUp ? nextSet : nextRise) ? clock(sunUp ? nextSet : nextRise) : "--"}</div>
-    <div class="card-note">${sunUp ? (nextRise ? "Sunrise: " + clock(nextRise) : "") : (nextSet ? "Sunset: " + clock(nextSet) : "")}</div>` });
-
   const pu = imp ? "″" : " mm", ps = d.precipitation_sum || [];
   const nextWet = ps.findIndex((v, i) => i > 0 && v > (imp ? 0.01 : 0.2));
   card("c-precip", { title: "Precipitation", glyphKey: "umbrella", cls: "square", body: `<div class="big">${num(ps[0], imp ? 2 : 1)}${pu}</div><div class="sub">Today</div>
     <div class="card-note">${nextWet > 0 ? `${num(ps[nextWet], imp ? 2 : 1)}${pu} expected ${nextWet === 1 ? "tomorrow" : weekday(d.time[nextWet])}.` : "None expected in the next 10 days."}</div>` });
 
   state.tz = f.timezone;
+}
+
+function renderSunWidget(rise, set) {
+  const w = $("#sunwidget");
+  $("#sw-rise").textContent = rise ? clock(rise) : "--";
+  $("#sw-set").textContent = set ? clock(set) : "--";
+  w.classList.toggle("empty", !rise && !set);
+  w.setAttribute("aria-label", `Sunrise ${rise ? clock(rise) : "none"}, sunset ${set ? clock(set) : "none"}`);
 }
 
 function sunEventIcon(which) {
@@ -554,14 +567,14 @@ function airnowToAir(rows) {
 
 function renderFire(place, fires) {
   if (!fires.length) {
-    card("c-fire", { title: "Nearest Fire", glyphKey: "flame", cls: "square", body: `<div class="sub">None</div><div class="card-note">No active wildfires reported in the U.S.</div>` });
+    card("c-fire", { title: "Nearest Fire", glyphKey: "flame", body: `<div class="sub">None</div><div class="card-note">No active wildfires reported in the U.S.</div>` });
     return;
   }
   const ranked = fires.map(f => ({ ...f, mi: distanceMiles(place, f), brg: bearing(place, f) })).sort((a, b) => a.mi - b.mi);
   state.fires = ranked.slice(0, 8);
   const n = ranked[0], within = ranked.filter(f => f.mi <= 50).length;
   card("c-fire", {
-    title: "Nearest Fire", glyphKey: "flame", cls: "square", action: "fires",
+    title: "Nearest Fire", glyphKey: "flame", action: "fires",
     body: `<div class="fire-head"><div class="big">${num(n.mi, n.mi < 10 ? 1 : 0)}<small>mi</small></div>
         <span class="fire-arrow" style="transform:rotate(${n.brg.toFixed(0)}deg)" aria-hidden="true">${glyph("arrow", 2.6)}</span></div>
       <div class="sub" style="font-size:16px">${compass(n.brg)} · ${esc(n.name)}</div>
@@ -574,6 +587,41 @@ function firesSheet() {
   openSheet("Nearby Wildfires", `<div class="group">${list.map(f => `<div class="row"><span><b>${esc(f.name)}</b><br><span class="small" style="margin:0">${[f.county, f.state].filter(Boolean).map(esc).join(", ")}${f.discovered ? " · since " + new Date(f.discovered).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}</span></span>
       <span>${num(f.mi, f.mi < 10 ? 1 : 0)} mi ${compass(f.brg)}<br><span class="small" style="margin:0">${f.acres != null ? num(f.acres) + " ac" : ""}${f.contained != null ? " · " + num(f.contained) + "%" : ""}</span></span></div>`).join("")}</div>
     <p class="small">Straight-line distance and direction from ${esc(state.place && state.place.name || "this location")}. Source: <a href="https://data-nifc.opendata.arcgis.com/" target="_blank" rel="noopener">National Interagency Fire Center (WFIGS)</a>. Follow evacuation orders from local authorities.</p>`);
+}
+
+/* ---------------- °F / °C conversion ---------------- */
+
+function convertSheet() {
+  // Current temperature in °F, so the table can mark where "now" sits.
+  const nowF = state.temp == null ? null : (state.imperial ? state.temp : cToF(state.temp));
+  const nowRow = nowF == null ? null : Math.round(nowF / 5) * 5;
+  const rows = [];
+  for (let f = 120; f >= -40; f -= 5) {
+    rows.push(`<div class="row${f === nowRow ? " now" : ""}"${f === nowRow ? ' id="conv-now"' : ""}>
+      <span><i class="sw" style="background:${tempColor(f)}"></i>${f} °F${f === nowRow ? '<span class="tag">Now</span>' : ""}</span>
+      <span>${num(fToC(f), 1)} °C</span></div>`);
+  }
+  const startF = nowF == null ? 70 : Math.round(nowF);
+  openSheet("°F to °C", `
+    <div class="conv-wrap"><div class="conv">
+      <label><input id="cv-f" type="text" inputmode="decimal" value="${startF}" aria-label="Fahrenheit"><span>°F</span></label>
+      <span class="conv-eq">=</span>
+      <label><input id="cv-c" type="text" inputmode="decimal" value="${num(fToC(startF), 1)}" aria-label="Celsius"><span>°C</span></label>
+    </div>
+    <p class="small">Type in either box. °C = (°F − 32) × 5⁄9 · °F = °C × 9⁄5 + 32</p></div>
+    <h3>Conversion table</h3>
+    <div class="group ctable">${rows.join("")}</div>`, {
+    full: true, onOpen: root => {
+      const fIn = $("#cv-f", root), cIn = $("#cv-c", root);
+      const parse = v => parseFloat(String(v).replace(",", ".").replace("−", "-"));
+      const fmt = v => String(Math.round(v * 10) / 10);
+      fIn.addEventListener("input", () => { const v = parse(fIn.value); cIn.value = isNaN(v) ? "" : fmt(fToC(v)); });
+      cIn.addEventListener("input", () => { const v = parse(cIn.value); fIn.value = isNaN(v) ? "" : fmt(cToF(v)); });
+      [fIn, cIn].forEach(i => i.addEventListener("focus", () => i.select()));
+      const now = $("#conv-now", root);
+      if (now) setTimeout(() => now.scrollIntoView({ block: "center" }), 60);
+    },
+  });
 }
 
 /* ---------------- Sources footer ---------------- */
@@ -677,7 +725,7 @@ function fillLocCards(root) {
     getForecast(p).then(f => {
       const c = f.current, [a, b] = SKY_COLORS[skyFor(c.weather_code, c.is_day)];
       el.style.setProperty("--a", a); el.style.setProperty("--b", b);
-      $(".lt", el).textContent = T(c.temperature_2m);
+      $(".lt", el).innerHTML = TT(c.temperature_2m, f.imperial);
       $(".lc", el).textContent = condName(c.weather_code, c.is_day);
       $(".lh", el).textContent = `H:${T(f.daily.temperature_2m_max[0])}  L:${T(f.daily.temperature_2m_min[0])}`;
     }).catch(() => {});
@@ -749,7 +797,8 @@ async function show(place, mode, quiet) {
   else {
     ["#h-temp", "#h-cond", "#h-hl"].forEach(s => { $(s).innerHTML = "&nbsp;"; });
     loadingCard("c-hourly", "", "clock"); loadingCard("c-daily", "10-Day Forecast", "calendar"); loadingCard("c-wind", "Wind", "wind");
-    clear("c-uv", "c-feels", "c-humid", "c-vis", "c-press", "c-sun", "c-precip");
+    clear("c-uv", "c-feels", "c-humid", "c-vis", "c-press", "c-precip");
+    $("#h-alt").innerHTML = "&nbsp;"; $("#h-hl-alt").textContent = ""; renderSunWidget(null, null);
   }
   clear("c-alerts", "c-fire");
   loadingCard("c-aqi", "Air Quality", "aqi");
@@ -827,6 +876,7 @@ $(".search-ico").innerHTML = glyph("search", 2.4);
 $("#btn-locate").addEventListener("click", () => locate(true));
 $("#btn-search").addEventListener("click", searchSheet);
 $("#btn-list").addEventListener("click", searchSheet);
+$("#btn-convert").addEventListener("click", convertSheet);
 $("#empty-search").addEventListener("click", searchSheet);
 $("#empty-locate").addEventListener("click", () => locate(true));
 $("#pv-cancel").addEventListener("click", () => { const last = store.get("wx:last", null); last ? show(last.place, last.mode) : fallback(); });
