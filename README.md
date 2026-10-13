@@ -13,7 +13,6 @@ Shows current conditions, hourly and 10-day forecast, wind (speed, gusts, direct
 
 - **Severe weather alerts** — National Weather Service (api.weather.gov), tap for full text and instructions.
 - **Air quality (AQI)** — EPA AirNow monitors when a free AirNow key is added in Settings, otherwise the Copernicus CAMS model (EU government) via Open-Meteo. Tap for pollutants.
-- **Pollen** — tree, grass and weed levels plus the plant species in season. No U.S. government agency publishes pollen data, so U.S. pollen needs a free Google Pollen API key (Settings). In Europe, Copernicus CAMS pollen is used with no key.
 - **Nearest wildfire** — miles and direction to the closest active wildfire from the National Interagency Fire Center (WFIGS current incidents), tap for the nearest fires with size and containment.
 
 Forecast data comes from Open-Meteo, which serves national weather service models (NOAA HRRR/GFS in the U.S.). U.S. place names come from the NWS, others from OpenStreetMap. API keys are stored only on the device.
