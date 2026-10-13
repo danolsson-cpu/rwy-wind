@@ -1,7 +1,7 @@
 "use strict";
 /*
  * Weather — current position + search, with U.S. severe weather alerts,
- * air quality, pollen and the nearest wildfire.
+ * air quality and the nearest wildfire.
  *
  * Data (all free, no account needed unless noted):
  *   Forecast + wind ...... Open-Meteo, built on national weather service models (NOAA HRRR/GFS in the U.S.)
@@ -9,8 +9,6 @@
  *   Place names (U.S.) ... National Weather Service /points
  *   Wildfires ............ NIFC / WFIGS current incident locations (federal interagency)
  *   Air quality .......... EPA AirNow (optional free key), otherwise Copernicus CAMS via Open-Meteo
- *   Pollen ............... Copernicus CAMS via Open-Meteo (Europe). No U.S. agency publishes pollen,
- *                          so U.S. pollen uses the Google Pollen API with a free key (Settings).
  *   Search ............... Open-Meteo geocoding (GeoNames), reverse names outside the U.S. from OpenStreetMap
  */
 
@@ -22,7 +20,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } },
 };
 
-const settings = Object.assign({ units: "auto", airnowKey: "", pollenKey: "" }, store.get("wx:settings", {}));
+const settings = Object.assign({ units: "auto", airnowKey: "" }, store.get("wx:settings", {}));
 let saved = store.get("wx:saved", []);
 
 function imperial() {
@@ -51,7 +49,6 @@ const URLS = {
   nws: "https://api.weather.gov",
   wfigs: "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Incident_Locations_Current/FeatureServer/0/query",
   airnow: "https://www.airnowapi.org/aq/observation/latLong/current/",
-  pollen: "https://pollen.googleapis.com/v1/forecast:lookup",
   nominatim: "https://nominatim.openstreetmap.org/reverse",
 };
 const NWS_HEADERS = { headers: { Accept: "application/geo+json" } };
@@ -105,14 +102,12 @@ async function reverseName(place) {
   return { name: a.city || a.town || a.village || a.hamlet || a.municipality || a.county || j.name || "My Location", admin: a.state || "", country: a.country || "", cc: (a.country_code || "").toUpperCase() };
 }
 
-// Copernicus CAMS air quality + pollen (pollen only populated in Europe).
-const POLLEN_VARS = ["alder_pollen", "birch_pollen", "olive_pollen", "grass_pollen", "mugwort_pollen", "ragweed_pollen"];
+// Copernicus CAMS air quality model.
 function getCams(place) {
   return cached("aq:" + ll(place), 20 * 60e3, async () => {
     const base = "us_aqi,us_aqi_pm2_5,us_aqi_pm10,us_aqi_ozone,us_aqi_nitrogen_dioxide,us_aqi_sulphur_dioxide,us_aqi_carbon_monoxide,pm2_5,pm10,ozone,nitrogen_dioxide,sulphur_dioxide,carbon_monoxide";
-    const q = new URLSearchParams({ latitude: place.lat.toFixed(4), longitude: place.lon.toFixed(4), timezone: "auto", current: base + "," + POLLEN_VARS.join(",") });
-    try { return await fetchJSON(URLS.air + "?" + q); }
-    catch (e) { q.set("current", base); return fetchJSON(URLS.air + "?" + q); }
+    const q = new URLSearchParams({ latitude: place.lat.toFixed(4), longitude: place.lon.toFixed(4), timezone: "auto", current: base });
+    return fetchJSON(URLS.air + "?" + q);
   });
 }
 
@@ -123,13 +118,6 @@ function getAirNow(place) {
     const rows = await fetchJSON(URLS.airnow + "?" + q);
     if (!Array.isArray(rows) || !rows.length) throw new Error("No AirNow reporting area nearby");
     return rows;
-  });
-}
-
-function getGooglePollen(place) {
-  return cached("gp:" + ll(place), 60 * 60e3, () => {
-    const q = new URLSearchParams({ key: settings.pollenKey, "location.latitude": place.lat.toFixed(4), "location.longitude": place.lon.toFixed(4), days: "1", languageCode: "en", plantsDescription: "false" });
-    return fetchJSON(URLS.pollen + "?" + q);
   });
 }
 
@@ -288,7 +276,6 @@ function icon(code, isDay = 1) {
 const G = {
   wind: "M3 8h10a3 3 0 1 0-3-3M3 12h15a3 3 0 1 1-3 3M3 16h7",
   aqi: "M3 6h10M3 10h18M3 14h14M3 18h8",
-  leaf: "M5 20c0-9 6-15 16-15 0 10-6 15-15 15M5 20l8-8",
   flame: "M12 2.5c.8 4 6 6 6 11.5a6 6 0 0 1-12 0c0-3 2-4.5 2-7 2 1.2 3 3.5 3 3.5 1-3 1-5 1-8z",
   alert: "M12 3.5l9.5 17h-19zM12 10v5M12 17.6v.4",
   sun: "M12 7.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zM12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4",
@@ -563,61 +550,6 @@ function airnowToAir(rows) {
   };
 }
 
-/* ---------------- Rendering: pollen ---------------- */
-
-const LEVELS = ["None", "Very Low", "Low", "Moderate", "High", "Very High"];
-const LEVEL_COLORS = ["rgba(255,255,255,.16)", "#5fd08a", "#a8dc4b", "#ffd60a", "#ff9f0a", "#ff453a"];
-// CAMS reports grains/m³; rough clinical thresholds per pollen group.
-const GRAIN_THRESH = { tree: [1, 15, 90, 500, 1500], grass: [1, 5, 20, 200, 500], weed: [1, 5, 10, 50, 500] };
-const grainsToLevel = (v, group) => { if (!v || v < 1) return 0; const t = GRAIN_THRESH[group]; let l = 0; for (let i = 0; i < t.length; i++) if (v >= t[i]) l = i + 1; return Math.min(5, l); };
-
-function pollenRow(name, level, note) {
-  const bars = [1, 2, 3, 4, 5].map(i => `<i style="${i <= level ? `background:${LEVEL_COLORS[level]}` : ""}"></i>`).join("");
-  return `<div class="prow"><span class="n">${esc(name)}</span><span class="bars">${bars}</span><span class="lvl">${esc(note || LEVELS[level])}</span></div>`;
-}
-
-function renderPollen(p) {
-  if (!p) return;
-  if (p.missing) {
-    card("c-pollen", { title: "Pollen", glyphKey: "leaf", action: "settings", body: `<div class="card-text">No U.S. government agency publishes pollen counts.</div>
-      <div class="card-note">Add a free Google Pollen API key in Settings to see tree, grass and weed pollen with the plant species in season.</div>` });
-    return;
-  }
-  const rows = p.types.map(t => pollenRow(t.name, t.level, t.inSeason === false ? "Out of season" : null)).join("");
-  const sp = p.species.filter(s => s.level > 0 || s.inSeason).sort((a, b) => b.level - a.level);
-  const chips = sp.length ? `<div class="species">${sp.map(s => `<span class="chip">${esc(s.name)}<b>${esc(LEVELS[s.level])}</b></span>`).join("")}</div>` : "";
-  const worst = p.types.slice().sort((a, b) => b.level - a.level)[0];
-  card("c-pollen", {
-    title: "Pollen", glyphKey: "leaf",
-    body: `<div class="pollen-rows">${rows}</div>${chips}
-      <div class="card-note">${worst && worst.level >= 3 ? `${worst.name} pollen is ${LEVELS[worst.level].toLowerCase()} today${sp[0] ? `, mostly ${sp.filter(s => s.level >= 2).slice(0, 3).map(s => s.name.toLowerCase()).join(", ") || sp[0].name.toLowerCase()}` : ""}.` : "Pollen levels are low today."} <span class="muted">${esc(p.source)}</span></div>`,
-  });
-}
-
-function googleToPollen(j) {
-  const day = (j.dailyInfo || [])[0];
-  if (!day) return null;
-  const typeName = { TREE: "Tree", GRASS: "Grass", WEED: "Weed" };
-  const types = ["TREE", "GRASS", "WEED"].map(code => {
-    const t = (day.pollenTypeInfo || []).find(x => x.code === code) || {};
-    return { name: typeName[code], level: (t.indexInfo && t.indexInfo.value) || 0, inSeason: t.inSeason };
-  });
-  const species = (day.plantInfo || []).map(s => ({ name: s.displayName || titleCase(s.code), level: (s.indexInfo && s.indexInfo.value) || 0, inSeason: !!s.inSeason }));
-  return { types, species, source: "Google Pollen API" };
-}
-
-function camsToPollen(j) {
-  const c = j.current || {};
-  if (POLLEN_VARS.every(k => c[k] == null)) return null;
-  const sp = [["Alder", "alder_pollen", "tree"], ["Birch", "birch_pollen", "tree"], ["Olive", "olive_pollen", "tree"], ["Grass", "grass_pollen", "grass"], ["Mugwort", "mugwort_pollen", "weed"], ["Ragweed", "ragweed_pollen", "weed"]]
-    .map(([name, k, g]) => ({ name, group: g, grains: c[k], level: grainsToLevel(c[k], g) }));
-  const groupLevel = g => Math.max(0, ...sp.filter(s => s.group === g).map(s => s.level));
-  return {
-    types: [{ name: "Tree", level: groupLevel("tree") }, { name: "Grass", level: groupLevel("grass") }, { name: "Weed", level: groupLevel("weed") }],
-    species: sp.filter(s => s.name !== "Grass"), source: "Copernicus CAMS via Open-Meteo",
-  };
-}
-
 /* ---------------- Rendering: wildfire ---------------- */
 
 function renderFire(place, fires) {
@@ -650,7 +582,7 @@ function renderSources(place) {
   const us = isUS(place);
   $("#sources").innerHTML = `Weather: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (${us ? "NOAA HRRR / GFS" : "national weather service"} models)
     ${us ? `· Alerts: <a href="https://www.weather.gov/" target="_blank" rel="noopener">NWS</a> · Fires: <a href="https://www.nifc.gov/" target="_blank" rel="noopener">NIFC</a>` : ""}
-    <br>Air quality: ${settings.airnowKey && us ? "EPA AirNow / " : ""}Copernicus CAMS · Pollen: ${settings.pollenKey ? "Google Pollen" : "Copernicus CAMS"}
+    <br>Air quality: ${settings.airnowKey && us ? "EPA AirNow / " : ""}Copernicus CAMS
     <br>Updated ${new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
 }
 
@@ -756,12 +688,10 @@ function settingsSheet() {
   const seg = [["auto", "Auto"], ["us", "°F · mph"], ["metric", "°C · km/h"]].map(([k, l]) => `<button type="button" data-u="${k}" class="${settings.units === k ? "on" : ""}">${l}</button>`).join("");
   openSheet("Settings", `
     <h3>Units</h3><div class="seg" id="seg">${seg}</div>
-    <h3>Optional data keys</h3>
+    <h3>Optional data key</h3>
     <div class="group" style="padding:12px 16px">
       <label class="field"><span>EPA AirNow API key — official U.S. monitor AQI</span><input id="k-airnow" value="${esc(settings.airnowKey)}" placeholder="Not set: uses Copernicus CAMS" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
-      <p class="small">Free from <a href="https://docs.airnowapi.org/account/request/" target="_blank" rel="noopener">docs.airnowapi.org</a>.</p>
-      <label class="field"><span>Google Pollen API key — U.S. pollen with species</span><input id="k-pollen" value="${esc(settings.pollenKey)}" placeholder="Not set" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
-      <p class="small">No U.S. agency publishes pollen counts. A Google Maps Platform key with the Pollen API enabled covers the U.S.; the free monthly allowance is plenty for one person. Keys are stored only on this device.</p>
+      <p class="small">Free from <a href="https://docs.airnowapi.org/account/request/" target="_blank" rel="noopener">docs.airnowapi.org</a>. The key is stored only on this device.</p>
     </div>
     <h3>Data sources</h3>
     <div class="group">
@@ -769,7 +699,6 @@ function settingsSheet() {
       <div class="row"><span>Severe weather alerts</span><span>National Weather Service</span></div>
       <div class="row"><span>Wildfires</span><span>NIFC · WFIGS</span></div>
       <div class="row"><span>Air quality</span><span>EPA AirNow · Copernicus CAMS</span></div>
-      <div class="row"><span>Pollen</span><span>Google Pollen · Copernicus CAMS</span></div>
       <div class="row"><span>Place search</span><span>Open-Meteo / GeoNames · NWS · OpenStreetMap</span></div>
     </div>
     <p class="small">For general information. Always follow official warnings and local authorities.</p>`, {
@@ -781,9 +710,9 @@ function settingsSheet() {
         if (state.place) show(state.place, state.mode, true);
       });
       const save = () => {
-        const a = $("#k-airnow", root).value.trim(), p = $("#k-pollen", root).value.trim();
-        if (a === settings.airnowKey && p === settings.pollenKey) return;
-        settings.airnowKey = a; settings.pollenKey = p; store.set("wx:settings", settings);
+        const a = $("#k-airnow", root).value.trim();
+        if (a === settings.airnowKey) return;
+        settings.airnowKey = a; store.set("wx:settings", settings);
         memo.clear();
         if (state.place) show(state.place, state.mode, true);
       };
@@ -823,7 +752,7 @@ async function show(place, mode, quiet) {
     clear("c-uv", "c-feels", "c-humid", "c-vis", "c-press", "c-sun", "c-precip");
   }
   clear("c-alerts", "c-fire");
-  loadingCard("c-aqi", "Air Quality", "aqi"); loadingCard("c-pollen", "Pollen", "leaf");
+  loadingCard("c-aqi", "Air Quality", "aqi");
 
   const fc = getForecast(place).then(f => {
     if (!live()) return;
@@ -849,25 +778,13 @@ async function show(place, mode, quiet) {
   renderSources(place);
 
   // Air quality: EPA AirNow when a key is set, else Copernicus CAMS.
-  const cams = getCams(place).catch(() => null);
   (async () => {
     let air = null;
     if (us && settings.airnowKey) { try { air = airnowToAir(await getAirNow(place)); } catch { /* fall back */ } }
-    if (!air) { const j = await cams; air = j && camsToAir(j); }
+    if (!air) { const j = await getCams(place).catch(() => null); air = j && camsToAir(j); }
     if (!live()) return;
     state.air = air;
     if (air) renderAir(air); else errorCard("c-aqi", "Air Quality", "aqi", "Air quality isn't available right now.");
-  })();
-
-  // Pollen: Google (with key) → CAMS (Europe) → explain.
-  (async () => {
-    let p = null;
-    if (settings.pollenKey) { try { p = googleToPollen(await getGooglePollen(place)); } catch { /* fall back */ } }
-    if (!p) { const j = await cams; p = j && camsToPollen(j); }
-    if (!live()) return;
-    if (p) renderPollen(p);
-    else if (us) renderPollen({ missing: true });
-    else errorCard("c-pollen", "Pollen", "leaf", "Pollen data isn't available for this location.");
   })();
 
   if (us) {

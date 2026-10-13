@@ -1,7 +1,7 @@
 {
   "name": "Weather",
   "short_name": "Weather",
-  "description": "Weather, wind, severe weather alerts, air quality, pollen and nearest wildfire.",
+  "description": "Weather, wind, severe weather alerts, air quality and nearest wildfire.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

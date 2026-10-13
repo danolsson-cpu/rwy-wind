@@ -157,16 +157,6 @@ button.card:active { transform: scale(.985); }
 .scale.aqi { background: linear-gradient(90deg, #00e400 0%, #ffff00 16.7%, #ff7e00 33.3%, #ff0000 50%, #8f3f97 66.7%, #7e0023 100%); }
 .scale.uv { background: linear-gradient(90deg, #3fc153 0%, #f6d31d 27%, #f59a1c 55%, #e2402b 82%, #a454e0 100%); }
 
-/* Pollen */
-.pollen-rows { display: grid; gap: 10px; margin-top: 2px; }
-.prow { display: grid; grid-template-columns: 5.2em 1fr auto; align-items: center; gap: 10px; }
-.prow .n { font-weight: 600; font-size: 16px; }
-.prow .lvl { font-size: 14px; font-weight: 600; text-align: right; min-width: 6.5em; }
-.bars { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; }
-.bars i { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .16); }
-.species { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
-.chip { font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: rgba(255, 255, 255, .14); border: .5px solid var(--stroke); }
-.chip b { font-weight: 500; color: var(--fg2); margin-left: 4px; }
 
 /* Wind */
 .wind { display: grid; grid-template-columns: 1fr 132px; gap: 14px; align-items: center; }
